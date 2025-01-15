@@ -1,13 +1,11 @@
-from scapy.all import rdpcap, ARP, IP
+from scapy.all import rdpcap, ARP, IP, Ether
 from NetDevice import NetDevice
 from consts import *
-
+from pprint import pprint
 
 """
 
 TODO:
-* add also part information
-* search better. what if there is mac but no ip?
 
 """
 
@@ -19,41 +17,65 @@ class AnalyzeNetwork:
         """
         self.pcap_data = rdpcap(pcap_path)
         self.devices: list[NetDevice] = []
-        self.ips: list[str] = []
-        self.macs: list[str] = []
+
+    def find_merge_dev(self, ip=DEFAULT_IP, mac=DEFAULT_MAC):
+        found_dev = None
+        devs_to_remove = []
+        for dev in self.devices:
+            if (ip == dev.ip and ip not in NOT_DEV_IPS) or \
+                    (mac == dev.mac and mac not in NOT_DEV_MACS):
+
+                if found_dev:
+                    self.merge_devs(found_dev, dev)
+                    devs_to_remove.append(dev)
+                else:
+                    found_dev = dev
+
+        if devs_to_remove:
+            for dev in devs_to_remove:
+                self.devices.remove(dev)
+
+        return found_dev
 
 
-    def add_dev(self, ip=DEFAULT_IP, mac=DEFAULT_MAC, vendor=DEFAULT_VENDOR):
-        if mac == BROADCAST_MAC:
-            mac = DEFAULT_MAC
-        if ip == BROADCAST_IP:
+    def merge_devs(self, dev: NetDevice, merging_dev: NetDevice):
+        """
+        merge merging_dev into dev
+        """
+        if dev.ip == DEFAULT_IP and merging_dev.ip not in NOT_DEV_IPS:
+            dev.set_ip(merging_dev.ip)
+        if dev.mac == DEFAULT_MAC and merging_dev.mac not in NOT_DEV_MACS:
+            dev.set_mac(merging_dev.mac)
+
+
+    def add_dev(self, ip=DEFAULT_IP, mac=DEFAULT_MAC):
+        if ip in NOT_DEV_IPS:
             ip = DEFAULT_IP
+        if mac in NOT_DEV_MACS:
+            mac = DEFAULT_MAC
 
-
-        self.devices.append(NetDevice(ip, mac, vendor))
-        if (ip != DEFAULT_IP):
-            self.ips.append(ip)
-        if (mac != DEFAULT_MAC and mac != BROADCAST_MAC):
-            self.macs.append(mac)
-
-
-    def get_vendor_from_mac(self, mac_addr : str):
-        return DEFAULT_VENDOR
+        dev = self.find_merge_dev(ip, mac)
+        if not dev:  
+            if (ip not in NOT_DEV_IPS or mac not in NOT_DEV_MACS):
+                self.devices.append(NetDevice(ip, mac, calc_vendor=True))
+            return
+        
+        self.merge_devs(dev, NetDevice(ip, mac))
 
 
     def add_devices_from_pkt(self, pkt):
-        if ARP not in pkt:
-            return None
+        if Ether not in pkt:
+            return
         src_mac = pkt.src
-        if src_mac not in self.macs:
-            src_ip = pkt[ARP].psrc
-            src_vendor = self.get_vendor_from_mac(src_mac)
-            self.add_dev(src_ip, src_mac, src_vendor)
         dst_mac = pkt.dst
-        if dst_mac not in self.macs:
-            dst_ip = pkt[ARP].pdst
-            dst_vendor = self.get_vendor_from_mac(dst_mac)
-            self.add_dev(dst_ip, dst_mac, dst_vendor)
+        self.add_dev(mac=src_mac)
+        self.add_dev(mac=dst_mac)
+        if ARP in pkt:
+            self.add_dev(pkt[ARP].psrc, pkt[ARP].hwsrc)
+            self.add_dev(pkt[ARP].pdst, pkt[ARP].hwdst)
+        if IP in pkt: 
+            self.add_dev(ip=pkt[IP].src)
+            self.add_dev(ip=pkt[IP].dst)
 
 
     def add_devices_from_pcap(self):
@@ -73,14 +95,14 @@ class AnalyzeNetwork:
         """
         returns a list of ip addresses (strings) that appear in the pcap
         """
-        return self.ips
-
+        return [dev.ip for dev in self.devices if dev.ip not in NOT_DEV_IPS] 
 
     def get_macs(self):
         """
         returns a list of MAC addresses (strings) that appear in the pcap
         """
-        return self.macs
+        return [dev.mac for dev in self.devices if dev.mac not in NOT_DEV_MACS] 
+
 
 
     def get_info_by_ip(self, ip):
@@ -90,7 +112,6 @@ class AnalyzeNetwork:
         for dev in self.devices:
             if ip == dev.ip:
                 d = vars(dev)
-                print(d)
                 return d
         return {}
 
@@ -115,5 +136,9 @@ class AnalyzeNetwork:
 if __name__ == "__main__":
     analyzer = AnalyzeNetwork('pcap-00.pcapng')
     analyzer.add_devices_from_pcap()
-    print(analyzer.get_info())
+    info = analyzer.get_info()
+    pprint(info)
+    print()
+    pprint(analyzer.get_ips())
+    pprint(analyzer.get_macs())
     

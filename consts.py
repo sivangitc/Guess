@@ -4,3 +4,8 @@ DEFAULT_VENDOR = "unknown"
 
 BROADCAST_MAC = "ff:ff:ff:ff:ff:ff"
 BROADCAST_IP = "255.255.255.255"
+
+NOT_DEV_IPS = [DEFAULT_IP, BROADCAST_IP]
+NOT_DEV_MACS = [DEFAULT_MAC, BROADCAST_MAC, "00:00:00:00:00:00"]
+
+MAC_VENDOR_API_URL = "https://api.macvendors.com/"
