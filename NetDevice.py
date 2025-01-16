@@ -13,7 +13,9 @@ class NetDevice:
         self.vendor = DEFAULT_VENDOR
         if calc_vendor:
             self.vendor = self.get_vendor_from_mac()
-        self.ttls = []
+        self.icmp_fields = {"ttls": [], 
+                            "payload_lens": [],
+                            "DFs": []}
         self.os = []
 
     def set_ip(self, ip: str):
@@ -37,14 +39,40 @@ class NetDevice:
         else:
             return vendorsearch
         
-    def guess_os(self):
-        if not self.ttls:
-            return
-        ttl_avg = sum(self.ttls) / len(self.ttls)
+    def guess_os_by_ttl(self) -> (list | list[str]):
+        ttls = self.icmp_fields["ttls"]
+        if not ttls:
+            return []
+        ttl_avg = sum(ttls) / len(ttls)
         # probably made no more than 10 hops
         possible_oss = [oss for (t, oss) in OS_ICMP_TTL.items() if t >= ttl_avg and t - ttl_avg <= 10]
-        self.os = [os for oss in possible_oss for os in oss]
-        return self.os
+        oss = [os for oss in possible_oss for os in oss]
+        return oss
+    
+    def guess_os_by_DF(self) -> (None | list[str]):
+        dfs = self.icmp_fields["DFs"]
+        if not dfs:
+            return None
+        DFs_len = len(dfs)
+        if dfs == DFs_len * [True]:
+            return ["Windows"]
+        if dfs == DFs_len * [False]:
+            return ["Linux"]
+        return None
+    
+    def guess_os_by_payload_len(self) -> (None | list[str]):
+        payload_lens = self.icmp_fields["payload_lens"]
+        if not payload_lens:
+            return None
+        most_common_payload_len = max(set(payload_lens), key=payload_lens.count)
+        return OS_PAYLOAD_LENS.get(most_common_payload_len)
+
+    def guess_os(self):
+        for guess in [self.guess_os_by_ttl(), self.guess_os_by_payload_len(), self.guess_os_by_DF()]:
+            if guess:
+                self.os = guess
+                return guess
+        return []
 
     def __str__(self):
         return f"<{self.mac}> <{self.ip}> <{self.vendor}>"

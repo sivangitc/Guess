@@ -74,7 +74,7 @@ class AnalyzeNetwork:
             self.add_dev(ip=pkt[IP].dst)
 
 
-    def add_ttl_from_pkt(self, pkt):
+    def add_icmp_fields_from_pkt(self, pkt):
         if ICMP not in pkt:
             return
         mac = pkt.src
@@ -82,14 +82,20 @@ class AnalyzeNetwork:
         if not dev:
             return
         ttl = pkt[IP].ttl
-        dev.ttls.append(ttl)
+        dev.icmp_fields["ttls"].append(ttl)
+        dev.icmp_fields["payload_lens"].append(len(pkt.load))
+        if pkt[IP].flags & ICMP_DF_SET:
+            dev.icmp_fields["DFs"].append(True)
+        else:
+            dev.icmp_fields["DFs"].append(False)
+
 
     def add_devices_from_pcap(self, pcap_path: str):
         pcap_data = rdpcap(pcap_path)
         for pkt in pcap_data:
             self.add_devices_from_pkt(pkt)
         for pkt in pcap_data:
-            self.add_ttl_from_pkt(pkt)
+            self.add_icmp_fields_from_pkt(pkt)
         for dev in self.devices:
             dev.guess_os()
 
@@ -167,7 +173,7 @@ class AnalyzeNetwork:
 
 if __name__ == "__main__":
     analyzer = AnalyzeNetwork()
-    analyzer.add_devices_from_pcap('pcap-01.pcapng')
+    analyzer.add_devices_from_pcap('pcap-02.pcapng')
     info = analyzer.get_info()
     pprint(info)
     print()
