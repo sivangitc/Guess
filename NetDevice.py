@@ -16,6 +16,7 @@ class NetDevice:
         self.icmp_fields = {"ttls": [], 
                             "payload_lens": [],
                             "DFs": []}
+        self.program = ''
         self.os = []
 
     def set_ip(self, ip: str):

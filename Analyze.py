@@ -1,4 +1,4 @@
-from scapy.all import rdpcap, ARP, IP, Ether, ICMP
+from scapy.all import rdpcap, ARP, IP, Ether, ICMP, TCP, Raw
 from NetDevice import NetDevice
 from consts import *
 from pprint import pprint
@@ -77,8 +77,7 @@ class AnalyzeNetwork:
     def add_icmp_fields_from_pkt(self, pkt):
         if ICMP not in pkt:
             return
-        mac = pkt.src
-        dev = self.get_dev_by_mac(mac)
+        dev = self.get_sender_dev(pkt)
         if not dev:
             return
         ttl = pkt[IP].ttl
@@ -90,12 +89,36 @@ class AnalyzeNetwork:
             dev.icmp_fields["DFs"].append(False)
 
 
+    def add_http_fields_from_pkt(self, pkt):
+        if TCP not in pkt or Raw not in pkt:
+            return
+        load = pkt["Raw"].load
+        if b"HTTP" not in load:
+            return
+        load = load.decode()
+        lines: list[str] = load.split('\r\n')
+        dev = self.get_sender_dev(pkt)
+        if not dev:
+            return
+        for line in lines:
+            if line.startswith('Server:'):
+                dev.program = line[len('Server: '):]
+                break
+            if line.startswith('User-Agent:'):
+                dev.program = line[len('User-Agent: '):]
+                break
+
+    def get_sender_dev(self, pkt):
+        mac = pkt.src
+        return self.get_dev_by_mac(mac)
+
     def add_devices_from_pcap(self, pcap_path: str):
         pcap_data = rdpcap(pcap_path)
         for pkt in pcap_data:
             self.add_devices_from_pkt(pkt)
         for pkt in pcap_data:
             self.add_icmp_fields_from_pkt(pkt)
+            self.add_http_fields_from_pkt(pkt)
         for dev in self.devices:
             dev.guess_os()
 
@@ -158,10 +181,6 @@ class AnalyzeNetwork:
         for dev in self.devices:
             info_list.append(vars(dev))
         return info_list
-    
-
-    def guess_os(self, dev_info: dict[str, str]) -> list[str]:
-        ...
 
 
     def __repr__(self):
@@ -173,7 +192,7 @@ class AnalyzeNetwork:
 
 if __name__ == "__main__":
     analyzer = AnalyzeNetwork()
-    analyzer.add_devices_from_pcap('pcap-02.pcapng')
+    analyzer.add_devices_from_pcap('pcap-03.pcapng')
     info = analyzer.get_info()
     pprint(info)
     print()
