@@ -8,4 +8,12 @@ BROADCAST_IP = "255.255.255.255"
 NOT_DEV_IPS = [DEFAULT_IP, BROADCAST_IP]
 NOT_DEV_MACS = [DEFAULT_MAC, BROADCAST_MAC, "00:00:00:00:00:00"]
 
-MAC_VENDOR_API_URL = "https://api.macvendors.com/"
+OS_ICMP_TTL = {
+    32: ["Windows"] ,
+    60: ["Stratus"],
+    64: ["Linux", "MacOS"], 
+    128: ["Windows"], 
+    254: ["Solaris", "AIX"],
+    255: ["Linux", "Stratus"]
+}
+

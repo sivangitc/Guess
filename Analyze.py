@@ -1,4 +1,4 @@
-from scapy.all import rdpcap, ARP, IP, Ether
+from scapy.all import rdpcap, ARP, IP, Ether, ICMP
 from NetDevice import NetDevice
 from consts import *
 from pprint import pprint
@@ -11,11 +11,7 @@ TODO:
 
 
 class AnalyzeNetwork:
-    def __init__(self, pcap_path):
-        """
-        pcap_path (string): path to a pcap file
-        """
-        self.pcap_data = rdpcap(pcap_path)
+    def __init__(self):
         self.devices: list[NetDevice] = []
 
     def find_merge_dev(self, ip=DEFAULT_IP, mac=DEFAULT_MAC):
@@ -78,9 +74,24 @@ class AnalyzeNetwork:
             self.add_dev(ip=pkt[IP].dst)
 
 
-    def add_devices_from_pcap(self):
-        for pkt in self.pcap_data:
+    def add_ttl_from_pkt(self, pkt):
+        if ICMP not in pkt:
+            return
+        mac = pkt.src
+        dev = self.get_dev_by_mac(mac)
+        if not dev:
+            return
+        ttl = pkt[IP].ttl
+        dev.ttls.append(ttl)
+
+    def add_devices_from_pcap(self, pcap_path: str):
+        pcap_data = rdpcap(pcap_path)
+        for pkt in pcap_data:
             self.add_devices_from_pkt(pkt)
+        for pkt in pcap_data:
+            self.add_ttl_from_pkt(pkt)
+        for dev in self.devices:
+            dev.guess_os()
 
 
     def get_packet_ips(self, pkt):
@@ -103,20 +114,37 @@ class AnalyzeNetwork:
         """
         return [dev.mac for dev in self.devices if dev.mac not in NOT_DEV_MACS] 
 
+    def get_dev_by_ip(self, ip: str) -> NetDevice:
+        for dev in self.devices:
+            if ip == dev.ip:
+                return dev
+        return None
+    
+    def get_dev_by_mac(self, mac: str) -> NetDevice:
+        for dev in self.devices:
+            if mac == dev.mac:
+                return dev
+        return None
 
-
-    def get_info_by_ip(self, ip):
+    def get_info_by_ip(self, ip: str) -> list[str]:
         """
         returns a dict with all information about the device with given IP
         """
-        for dev in self.devices:
-            if ip == dev.ip:
-                d = vars(dev)
-                return d
+        dev = self.get_dev_by_ip(ip)
+        if dev:
+            return vars(dev)
+        return {}
+    
+    def get_info_by_mac(self, mac: str) -> list[str]:
+        """
+        returns a dict with all information about the device with given MAC
+        """
+        dev = self.get_dev_by_mac(mac)
+        if dev:
+            return vars(dev)
         return {}
 
-
-    def get_info(self):
+    def get_info(self) -> list[NetDevice]:
         """
         returns a list of dicts with information about every device in the pcap
         """
@@ -124,6 +152,10 @@ class AnalyzeNetwork:
         for dev in self.devices:
             info_list.append(vars(dev))
         return info_list
+    
+
+    def guess_os(self, dev_info: dict[str, str]) -> list[str]:
+        ...
 
 
     def __repr__(self):
@@ -134,8 +166,8 @@ class AnalyzeNetwork:
     
 
 if __name__ == "__main__":
-    analyzer = AnalyzeNetwork('pcap-00.pcapng')
-    analyzer.add_devices_from_pcap()
+    analyzer = AnalyzeNetwork()
+    analyzer.add_devices_from_pcap('pcap-01.pcapng')
     info = analyzer.get_info()
     pprint(info)
     print()
